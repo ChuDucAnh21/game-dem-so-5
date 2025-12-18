@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, user-scalable=no"
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+
+
+        <title>compare-quantity-game</title>
+        <link rel="stylesheet" href="/assets/fonts/fonts.css" />
+
+        <link
+            rel="preload"
+            href="/assets/fonts/baloo2/Baloo2-Regular.ttf"
+            as="font"
+            crossorigin
+        />
+
+        <link
+            rel="preload"
+            href="/assets/fonts/baloo2/Baloo2-Bold.ttf"
+            as="font"
+            crossorigin
+        />
+        <link rel="stylesheet" href="style.css" />
+        <script type="module" src="/src/main.ts"></script>
+    </head>
+    <body>
+        <div id="game-container">
+            <div id="bg-layer-a" class="bg-layer"></div>
+            <div id="bg-layer-b" class="bg-layer"></div>
+            <img
+                id="btn-reset"
+                class="ui-btn"
+                src="./assets/images/ui/btn_reset.png"
+            />
+        </div>
+        <!-- Overlay yêu cầu xoay ngang -->
+        <div id="rotate-msg">Vui lòng xoay ngang màn hình để chơi</div>
+    </body>
+</html>
