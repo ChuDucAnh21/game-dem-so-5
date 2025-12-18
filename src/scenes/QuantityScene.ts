@@ -425,6 +425,7 @@ export class QuantityScene extends Phaser.Scene {
         }
     }
 
+    // ========= Game logic =========
     private updateObjectsPanel() {
         const centerX = this.pctX(0.5);
         const centerY = this.pctY(0.4);
@@ -492,11 +493,13 @@ export class QuantityScene extends Phaser.Scene {
         this.isBgAActive = !this.isBgAActive;
     }
 
+    // Phát prompt cho level hiện tại
     private playPromptForLevel(level: CountLevel) {
         if (!level.promptKey) return;
         this.audio.playPrompt(level.promptKey);
     }
 
+    // Ẩn/hiện toàn bộ gameplay (dưới overlay)
     private setGameplayVisible(visible: boolean) {
         // Ẩn thật toàn bộ gameplay (nhưng không đụng DOM background)
         this.objectsPanel?.setVisible(visible);
@@ -595,6 +598,7 @@ export class QuantityScene extends Phaser.Scene {
         });
     }
 
+    // Bé bay vào vị trí bên cạnh overlay circle + tạo bubble
     private enterCircleOverlay(expectedCount: number) {
         this.hideAllUnderOverlay();
 
@@ -681,6 +685,7 @@ export class QuantityScene extends Phaser.Scene {
         this.overlayBubble!.setPosition(bubbleX, bubbleY);
     }
 
+    // Bé bay về vị trí cũ + xoá bubble
     private exitCircleOverlay() {
         this.overlayBubble?.destroy();
         this.overlayBubble = undefined;
@@ -713,6 +718,8 @@ export class QuantityScene extends Phaser.Scene {
             this.overlayBobTween = undefined;
         }
     }
+
+    //biến nhớ để xem cái nào bị ẩn
     private hideAllUnderOverlay() {
         this.overlayHidden = [];
 
@@ -732,6 +739,7 @@ export class QuantityScene extends Phaser.Scene {
         }
     }
 
+    // khôi phục lại các object đã ẩn
     private restoreAllUnderOverlay() {
         for (const obj of this.overlayHidden) {
             (obj as any).setVisible?.(true);
@@ -764,6 +772,7 @@ export class QuantityScene extends Phaser.Scene {
         this.animateLevelIntro();
     }
 
+    // Xoá hết vật và vòng tròn cũ
     private clearObjectsAndCircles() {
         this.objectSprites.forEach((s) => s.destroy());
         this.circleSprites.forEach((s) => s.destroy());
@@ -782,6 +791,7 @@ export class QuantityScene extends Phaser.Scene {
         }
     }
 
+    // Tính scale để vật vừa trong ô
     private getScaleForTexture(
         textureKey: string,
         maxWidth: number,
@@ -1272,6 +1282,7 @@ export class QuantityScene extends Phaser.Scene {
 
     // ========= Check & feedback =========
 
+    // Đếm có bao nhiêu vòng được tô đủ (theo fillThreshold)
     private countFilledCircles(): number {
         let count = 0;
 

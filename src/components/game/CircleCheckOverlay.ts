@@ -102,7 +102,7 @@ export class CircleCheckOverlay {
         );
     }
 
-    //thêm hàm public lấy rect panel:
+    // trả về toạ độ và kích thước panel trong world-space
     public getPanelRectWorld() {
         const px = this.panel?.x ?? this.panelX;
         const py = this.panel?.y ?? this.panelY;
@@ -144,8 +144,6 @@ export class CircleCheckOverlay {
         const leftStart = (w - totalW) / 2;
         this.panelX = leftStart + avatarColW + this.panelW / 2; // ✅ panel nằm bên phải
         this.panelY = h * 0.52; // giữa màn
-
-        const dim = opts.dimAlpha ?? 0.88; // ✅ tối mạnh để “chỉ còn panel”
 
         // reset
         this.clearDraw();
@@ -268,6 +266,7 @@ export class CircleCheckOverlay {
         return out;
     }
 
+    // scale tương đối theo panel cho dễ nhìn (bạn chỉnh tuỳ)
     private autoScaleByPanel() {
         // scale tương đối theo panel cho dễ nhìn (bạn chỉnh tuỳ)
         // nhỏ màn hình -> scale nhỏ
@@ -279,11 +278,13 @@ export class CircleCheckOverlay {
 
     // ================= Drawing =================
 
+    // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
     private getCloseThresholdPx() {
         // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
         return Math.max(28, Math.min(this.panelW, this.panelH) * 0.08);
     }
 
+    // kiểm tra nét vẽ có “kín” không
     private isStrokeClosed(points: Phaser.Math.Vector2[]) {
         if (points.length < 12) return false;
 
@@ -309,6 +310,7 @@ export class CircleCheckOverlay {
         return false;
     }
 
+    // tính diện tích polygon từ list điểm
     private polygonAreaFromPoints(points: Phaser.Math.Vector2[]) {
         // Shoelace, dùng list điểm (không cần Phaser.Area)
         let area = 0;
@@ -319,6 +321,7 @@ export class CircleCheckOverlay {
         return Math.abs(area) * 0.5;
     }
 
+    //item chổi bắt đầu nhấp nhô
     private startItemsBobbing() {
         // dọn tween cũ nếu có
         this.stopItemsBobbing();
@@ -342,7 +345,7 @@ export class CircleCheckOverlay {
             this.itemTweens.push(t);
         }
     }
-
+    //dừng nhấp nhô
     private stopItemsBobbing() {
         for (const t of this.itemTweens) t?.stop();
         this.itemTweens = [];
@@ -350,6 +353,7 @@ export class CircleCheckOverlay {
             this.scene.tweens.killTweensOf(this.itemsSprites);
     }
 
+    // lấy rect panel trong world-space
     private panelWorldRect() {
         const px = this.panel?.x ?? this.panelX;
         const py = this.panel?.y ?? this.panelY;
@@ -362,6 +366,7 @@ export class CircleCheckOverlay {
         };
     }
 
+    // kiểm tra toạ độ có trong panel không
     private isInsidePanel(worldX: number, worldY: number) {
         const r = this.panelWorldRect();
         return (
@@ -372,6 +377,7 @@ export class CircleCheckOverlay {
         );
     }
 
+    // sự kiện input vẽ
     private onDown(p: Phaser.Input.Pointer) {
         if (!this.root?.visible) return;
         if (!this.isInsidePanel(p.x, p.y)) return;
@@ -381,6 +387,7 @@ export class CircleCheckOverlay {
         this.redrawStroke();
     }
 
+    // sự kiện input vẽ (di chuyển)
     private onMove(p: Phaser.Input.Pointer) {
         if (!this.root?.visible) return;
         if (!this.drawing) return;
@@ -395,6 +402,7 @@ export class CircleCheckOverlay {
         this.redrawStroke();
     }
 
+    // sự kiện input vẽ (nhấc bút)
     private onUp(_p: Phaser.Input.Pointer) {
         if (!this.root?.visible) return;
         if (!this.drawing) return;
@@ -482,6 +490,7 @@ export class CircleCheckOverlay {
         }
     }
 
+    // vẽ lại nét vẽ
     private redrawStroke() {
         if (!this.drawGfx) return;
 
@@ -498,6 +507,7 @@ export class CircleCheckOverlay {
         this.drawGfx.strokePath();
     }
 
+    // tô vùng khoanh (xanh/đỏ)
     private paintResult(poly: Phaser.Geom.Polygon, isCorrect: boolean) {
         if (!this.resultGfx) return;
 
@@ -520,6 +530,7 @@ export class CircleCheckOverlay {
         this.resultGfx.strokePath();
     }
 
+    // phát voice an toàn (kiểm tra tồn tại key)
     private playVoiceSafe(key: string, onDone?: () => void) {
         if (!key) {
             onDone?.();
@@ -536,6 +547,7 @@ export class CircleCheckOverlay {
         onDone?.();
         return false;
     }
+
 
     private clearDraw() {
         this.points = [];
