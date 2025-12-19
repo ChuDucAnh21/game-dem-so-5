@@ -451,31 +451,7 @@ private findFirstIntersectionClosure() {
         return Math.max(28, Math.min(this.panelW, this.panelH) * 0.03);
     }
 
-    // kiểm tra nét vẽ có “kín” không
-    private isStrokeClosed(points: Phaser.Math.Vector2[]) {
-        if (points.length < 12) return false;
-
-        const last = points[points.length - 1];
-        const thr = this.getCloseThresholdPx();
-
-        // 1) gần điểm đầu -> coi là kín
-        const first = points[0];
-        if (
-            Phaser.Math.Distance.Between(first.x, first.y, last.x, last.y) <=
-            thr
-        )
-            return true;
-
-        // 2) hoặc “chạm lại” vào nét đã vẽ trước đó (không cần đúng điểm đầu)
-        // bỏ qua vài điểm cuối để tránh tự dính vào chính nó khi vừa nhấc bút
-        for (let i = 0; i < points.length - 8; i++) {
-            const p = points[i];
-            if (Phaser.Math.Distance.Between(p.x, p.y, last.x, last.y) <= thr)
-                return true;
-        }
-
-        return false;
-    }
+    
 
     // tính diện tích polygon từ list điểm
     private polygonAreaFromPoints(points: Phaser.Math.Vector2[]) {
