@@ -77,6 +77,7 @@ export class QuantityScene extends Phaser.Scene {
     private avatarFloatTween?: Phaser.Tweens.Tween;
     private overlayBubble?: Phaser.GameObjects.Container;
     private overlayAvatarBase?: { x: number; y: number; scale: number };
+    
 
     constructor() {
         // Đảm bảo key này trùng với key bạn dùng trong config game
@@ -672,13 +673,13 @@ export class QuantityScene extends Phaser.Scene {
         });
 
         // bubble
-        const msg = `Bé hãy khoanh nhóm ${expectedCount} chiếc chổi nhé!`;
+        const msg = `Bé khoanh nhóm ${expectedCount} chiếc chổi`;
         this.createSpeechBubbleNearAvatar(msg);
 
         const bubbleOffsetX = -0.9; // 👈 + sang phải, - sang trái
         const bubbleOffsetY = 0; // 👈 + xuống, - lên
 
-        const bubbleX = r.left + r.w * 0.3 + bubbleOffsetX;
+        const bubbleX = r.left + r.w * 0.23 + bubbleOffsetX;
         const bubbleY = r.top - h * 0.07 + bubbleOffsetY;
 
         this.overlayBubble!.setDepth(9200);

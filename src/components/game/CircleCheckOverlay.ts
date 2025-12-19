@@ -21,6 +21,18 @@ export type CircleCheckOverlayOptions = {
 };
 
 export class CircleCheckOverlay {
+    // ✅ hint xanh khi gần khép vòng
+    private closeHintGfx?: Phaser.GameObjects.Graphics;
+    private closeHintActive = false;
+    private closeHintAnchor?: Phaser.Math.Vector2;
+
+    // ✅ chỉ lưu “vòng kín ĐẦU TIÊN” phát hiện được (ứng viên), CHƯA tính ngay
+    private firstCandidate?: {
+        start: number;
+        end: number;
+        anchor: Phaser.Math.Vector2;
+    };
+
     private scene: Phaser.Scene;
     private audio?: HowlerAudioManager;
 
@@ -86,6 +98,10 @@ export class CircleCheckOverlay {
 
         this.resultGfx = this.scene.add.graphics().setScrollFactor(0);
         this.drawGfx = this.scene.add.graphics().setScrollFactor(0);
+
+        this.closeHintGfx = this.scene.add.graphics().setScrollFactor(0);
+        this.root.add(this.closeHintGfx);
+
         this.root.add(this.resultGfx);
         this.root.add(this.drawGfx);
 
@@ -216,6 +232,157 @@ export class CircleCheckOverlay {
 
     // ================= Layout =================
 
+    private segmentIntersection(
+  a: Phaser.Math.Vector2,
+  b: Phaser.Math.Vector2,
+  c: Phaser.Math.Vector2,
+  d: Phaser.Math.Vector2,
+  eps = 0.001
+) {
+  // Trả về {hit, t, u, point} với:
+  // P = a + t(b-a), Q = c + u(d-c)
+  const r = new Phaser.Math.Vector2(b.x - a.x, b.y - a.y);
+  const s = new Phaser.Math.Vector2(d.x - c.x, d.y - c.y);
+
+  const rxs = r.x * s.y - r.y * s.x;
+  const q_p = new Phaser.Math.Vector2(c.x - a.x, c.y - a.y);
+  const qpxr = q_p.x * r.y - q_p.y * r.x;
+
+  // song song hoặc collinear -> bỏ qua cho đơn giản
+  if (Math.abs(rxs) < eps) return null;
+
+  const t = (q_p.x * s.y - q_p.y * s.x) / rxs;
+  const u = qpxr / rxs;
+
+  // ✅ giao cắt thực sự trong đoạn (loại trừ gần đầu mút bằng eps)
+  if (t > eps && t < 1 - eps && u > eps && u < 1 - eps) {
+    return {
+      t,
+      u,
+      point: new Phaser.Math.Vector2(a.x + t * r.x, a.y + t * r.y),
+    };
+  }
+
+  return null;
+}
+
+/** tìm vị trí i sao cho đoạn mới (lastPrev->last) cắt đoạn cũ (points[i-1]->points[i]) */
+private findFirstIntersectionClosure() {
+  if (this.points.length < 6) return null;
+
+  const last = this.points[this.points.length - 1];
+  const lastPrev = this.points[this.points.length - 2];
+
+  // bỏ qua mấy đoạn gần cuối để tránh tự cắt ở chính chỗ vừa vẽ
+  const minGap = 10;
+
+  for (let i = 2; i < this.points.length - minGap; i++) {
+    const a = this.points[i - 1];
+    const b = this.points[i];
+
+    const hit = this.segmentIntersection(a, b, lastPrev, last);
+    if (hit) {
+      return {
+        start: i - 1,                 // vòng bắt đầu từ đoạn bị cắt
+        end: this.points.length - 1,  // tới điểm hiện tại
+        anchor: hit.point,            // điểm giao thật
+      };
+    }
+  }
+
+  return null;
+}
+
+
+    private findClosureIndex(last: Phaser.Math.Vector2) {
+  const thr = this.getCloseThresholdPx();
+
+  // ✅ dynamic minGap: vẽ ít điểm vẫn có cơ hội khép vòng
+  const minGap = Math.min(10, Math.max(3, Math.floor(this.points.length * 0.2)));
+
+  let bestIdx = -1;
+  let bestD2 = Infinity;
+
+  for (let i = 0; i < this.points.length - minGap; i++) {
+    const p = this.points[i];
+    const dx = p.x - last.x;
+    const dy = p.y - last.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx < 0) return -1;
+  return bestD2 <= thr * thr ? bestIdx : -1;
+}
+
+
+   private updateCloseHint() {
+  if (!this.closeHintGfx) return;
+
+  this.closeHintGfx.clear();
+
+  // ✅ đã chốt vòng rồi thì chỉ vẽ hint, không cập nhật nữa
+  if (this.firstCandidate) {
+    const a = this.firstCandidate.anchor;
+    this.closeHintGfx.fillStyle(0x00c853, 0.85);
+    this.closeHintGfx.fillCircle(a.x, a.y, 10);
+    return;
+  }
+
+  // ✅ vẽ ít cũng được (đừng bắt >= 12 cứng)
+  if (this.points.length < 8) return;
+
+  const last = this.points[this.points.length - 1];
+
+  // ===================== (A) TOUCH CLOSURE: chạm là khép =====================
+  const touchIdx = this.findClosureIndex(last);
+  if (touchIdx >= 0) {
+    const start = touchIdx;
+    const end = this.points.length - 1;
+
+    const loopPoints = this.points.slice(start, end + 1);
+
+    const minArea = this.panelW * this.panelH * 0.02;
+    const area = this.polygonAreaFromPoints(loopPoints);
+    if (area < minArea) return;
+
+    this.firstCandidate = {
+      start,
+      end,
+      anchor: this.points[touchIdx].clone(),
+    };
+
+    this.closeHintGfx.fillStyle(0x00c853, 0.85);
+    this.closeHintGfx.fillCircle(this.firstCandidate.anchor.x, this.firstCandidate.anchor.y, 10);
+    return;
+  }
+
+  // ===================== (B) INTERSECTION fallback =====================
+  const closure = this.findFirstIntersectionClosure();
+  if (!closure) return;
+
+  const start = closure.start;
+  const end = closure.end;
+  const loopPoints = this.points.slice(start, end + 1);
+
+  const minArea = this.panelW * this.panelH * 0.02;
+  const area = this.polygonAreaFromPoints(loopPoints);
+  if (area < minArea) return;
+
+  this.firstCandidate = {
+    start,
+    end,
+    anchor: closure.anchor,
+  };
+
+  this.closeHintGfx.fillStyle(0x00c853, 0.85);
+  this.closeHintGfx.fillCircle(closure.anchor.x, closure.anchor.y, 10);
+}
+
+
     /** trả về toạ độ trong panel-space (0..panelW, 0..panelH), đã căn giữa theo hàng */
     private layoutPositions(
         count: number,
@@ -281,7 +448,7 @@ export class CircleCheckOverlay {
     // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
     private getCloseThresholdPx() {
         // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
-        return Math.max(28, Math.min(this.panelW, this.panelH) * 0.08);
+        return Math.max(28, Math.min(this.panelW, this.panelH) * 0.03);
     }
 
     // kiểm tra nét vẽ có “kín” không
@@ -385,20 +552,28 @@ export class CircleCheckOverlay {
         this.drawing = true;
         this.points = [new Phaser.Math.Vector2(p.x, p.y)];
         this.redrawStroke();
+
+        this.firstCandidate = undefined;
+        this.closeHintActive = false;
+        this.closeHintAnchor = undefined;
+        this.closeHintGfx?.clear();
     }
 
     // sự kiện input vẽ (di chuyển)
     private onMove(p: Phaser.Input.Pointer) {
         if (!this.root?.visible) return;
         if (!this.drawing) return;
+        // nếu đã chốt vòng đầu tiên rồi thì không nhận thêm điểm nữa
+
         if (!this.isInsidePanel(p.x, p.y)) return;
 
         const last = this.points[this.points.length - 1];
         const dx = p.x - last.x;
         const dy = p.y - last.y;
-        if (dx * dx + dy * dy < 36) return; // lọc nhiễu ~6px (dễ vẽ hơn)
+        if (dx * dx + dy * dy < 10) return; // lọc nhiễu ~6px (dễ vẽ hơn)
 
         this.points.push(new Phaser.Math.Vector2(p.x, p.y));
+        this.updateCloseHint();
         this.redrawStroke();
     }
 
@@ -409,41 +584,47 @@ export class CircleCheckOverlay {
 
         this.drawing = false;
 
-        if (this.points.length < 12) {
-            this.clearDraw();
-            return;
-        }
+        // ✅ chỉ xét “vòng kín ĐẦU TIÊN” (và chỉ tính khi NHẤC TAY)
+        const closure = this.firstCandidate;
 
-        // ✅ BẮT BUỘC “KÍN” trước, rồi mới tính đúng/sai
-        const closed = this.isStrokeClosed(this.points);
-        if (!closed) {
+        // không có vòng kín nào => fail
+        if (!closure) {
             const failKey = (this as any)._failKey as string;
-            if (!this.playVoiceSafe(failKey))
-                this.audio?.play?.('sfx-wrong', { volume: 0.05 });
-
-            // không cho tính polygon, xoá để vẽ lại
-            this.scene.time.delayedCall(350, () => this.clearDraw());
+            this.playVoiceSafe(failKey);
+            this.scene.time.delayedCall(250, () => this.clearDraw());
             return;
         }
 
-        // ✅ tạo polygon: đóng vòng bằng cách nối về điểm đầu
+        // ✅ chỉ lấy đoạn [start..end] tại thời điểm nó khép vòng (bỏ phần kéo dài phía sau)
+        const loopPoints = this.points.slice(closure.start, closure.end + 1);
+
+        if (loopPoints.length < 12) {
+            const failKey = (this as any)._failKey as string;
+            this.playVoiceSafe(failKey);
+            this.scene.time.delayedCall(250, () => this.clearDraw());
+            return;
+        }
+
+        // tạo polygon đóng vòng về điểm đầu của loopPoints
         const ptsFlat: number[] = [];
-        for (const v of this.points) ptsFlat.push(v.x, v.y);
-        ptsFlat.push(this.points[0].x, this.points[0].y);
+        for (const v of loopPoints) ptsFlat.push(v.x, v.y);
+        // ptsFlat.push(loopPoints[0].x, loopPoints[0].y);
         const poly = new Phaser.Geom.Polygon(ptsFlat);
 
-        // ✅ chống khoanh quá nhỏ
-        const minArea = this.panelW * this.panelH * 0.02; // 2% panel
-        const area = this.polygonAreaFromPoints(this.points);
+        // chống khoanh quá nhỏ (dùng loopPoints)
+        const minArea = this.panelW * this.panelH * 0.02;
+        const area = this.polygonAreaFromPoints(loopPoints);
         if (area < minArea) {
             const failKey = (this as any)._failKey as string;
-            if (!this.playVoiceSafe(failKey))
-                this.audio?.play?.('sfx-wrong', { volume: 0.05 });
-            this.scene.time.delayedCall(350, () => this.clearDraw());
+            const played = this.playVoiceSafe(failKey, () =>
+                this.scene.time.delayedCall(120, () => this.clearDraw())
+            );
+            if (!played)
+                this.scene.time.delayedCall(350, () => this.clearDraw());
             return;
         }
 
-        // ✅ đếm số item nằm trong polygon
+        // đếm số item trong polygon
         let count = 0;
         for (const spr of this.itemsSprites) {
             const m = spr.getWorldTransformMatrix();
@@ -452,24 +633,19 @@ export class CircleCheckOverlay {
             if (Phaser.Geom.Polygon.Contains(poly, wx, wy)) count++;
         }
 
-        // ✅ CHỈ ĐÚNG KHI: “kín” + đúng số lượng
         const isCorrect = count === this.expectedCount;
-
-        this.paintResult(poly, isCorrect);
+        this.paintResult(loopPoints, isCorrect);
 
         const successKey = (this as any)._successKey as string;
         const failKey = (this as any)._failKey as string;
 
         if (isCorrect) {
-            // ✅ phát khen xong mới hide + onSuccess
             const played = this.playVoiceSafe(successKey, () => {
                 this.scene.time.delayedCall(120, () => {
                     this.hide();
                     this.onSuccess?.();
                 });
             });
-
-            // fallback nếu không có voice khen
             if (!played) {
                 this.audio?.play?.('sfx-correct', { volume: 0.9 });
                 this.scene.time.delayedCall(450, () => {
@@ -478,11 +654,9 @@ export class CircleCheckOverlay {
                 });
             }
         } else {
-            // ✅ phát "thử lại" xong mới clear nét
             const played = this.playVoiceSafe(failKey, () => {
                 this.scene.time.delayedCall(120, () => this.clearDraw());
             });
-
             if (!played) {
                 this.audio?.play?.('sfx-wrong', { volume: 0.05 });
                 this.scene.time.delayedCall(450, () => this.clearDraw());
@@ -508,27 +682,26 @@ export class CircleCheckOverlay {
     }
 
     // tô vùng khoanh (xanh/đỏ)
-    private paintResult(poly: Phaser.Geom.Polygon, isCorrect: boolean) {
-        if (!this.resultGfx) return;
+    private paintResult(loopPoints: Phaser.Math.Vector2[], isCorrect: boolean) {
+  if (!this.resultGfx) return;
 
-        this.resultGfx.clear();
-        const color = isCorrect ? 0x00c853 : 0xff4d4d;
+  this.resultGfx.clear();
+  const color = isCorrect ? 0x00c853 : 0xff4d4d;
 
-        this.resultGfx.fillStyle(color, 0.25);
-        this.resultGfx.lineStyle(8, color, 0.9);
+  // ✅ fill vùng khoanh (có thể đóng shape để tô, nhưng KHÔNG vẽ viền đóng)
+  this.resultGfx.fillStyle(color, 0.25);
+  this.resultGfx.fillPoints(loopPoints as any, true); // true = close để fill
 
-        const pts = poly.points;
-        if (!pts || pts.length < 3) return;
+  // ✅ stroke đúng theo nét người vẽ (KHÔNG nối điểm cuối về điểm đầu)
+  this.resultGfx.lineStyle(8, color, 0.9);
+  this.resultGfx.beginPath();
+  this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
+  for (let i = 1; i < loopPoints.length; i++) {
+    this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
+  }
+  this.resultGfx.strokePath();
+}
 
-        this.resultGfx.beginPath();
-        this.resultGfx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) {
-            this.resultGfx.lineTo(pts[i].x, pts[i].y);
-        }
-        this.resultGfx.closePath();
-        this.resultGfx.fillPath();
-        this.resultGfx.strokePath();
-    }
 
     // phát voice an toàn (kiểm tra tồn tại key)
     private playVoiceSafe(key: string, onDone?: () => void) {
@@ -548,11 +721,16 @@ export class CircleCheckOverlay {
         return false;
     }
 
-
     private clearDraw() {
         this.points = [];
+        this.firstCandidate = undefined;
+
+        this.closeHintActive = false;
+        this.closeHintAnchor = undefined;
+
         this.drawGfx?.clear();
         this.resultGfx?.clear();
+        this.closeHintGfx?.clear();
     }
 
     private clearItems() {
