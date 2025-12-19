@@ -23,8 +23,8 @@ export type CircleCheckOverlayOptions = {
 export class CircleCheckOverlay {
     // ✅ hint xanh khi gần khép vòng
     private closeHintGfx?: Phaser.GameObjects.Graphics;
-    private closeHintActive = false;
-    private closeHintAnchor?: Phaser.Math.Vector2;
+    closeHintActive = false;
+    closeHintAnchor?: Phaser.Math.Vector2;
 
     // ✅ chỉ lưu “vòng kín ĐẦU TIÊN” phát hiện được (ứng viên), CHƯA tính ngay
     private firstCandidate?: {
