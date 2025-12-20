@@ -680,6 +680,7 @@ export class CircleCheckOverlay {
         const failKey = (this as any)._failKey as string;
 
         if (isCorrect) {
+            this.inputLocked = true;
             this.showCheckIcon(true);
             this.audio?.play?.('sfx-correct', { volume: 0.9 });
             const played = this.playVoiceSafe(successKey, () => {
