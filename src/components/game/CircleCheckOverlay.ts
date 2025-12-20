@@ -408,32 +408,7 @@ export class CircleCheckOverlay {
         return null;
     }
 
-    private findClosureIndex(last: Phaser.Math.Vector2) {
-        const thr = this.getCloseThresholdPx();
-
-        // ✅ dynamic minGap: vẽ ít điểm vẫn có cơ hội khép vòng
-        const minGap = Math.min(
-            10,
-            Math.max(3, Math.floor(this.points.length * 0.2))
-        );
-
-        let bestIdx = -1;
-        let bestD2 = Infinity;
-
-        for (let i = 0; i < this.points.length - minGap; i++) {
-            const p = this.points[i];
-            const dx = p.x - last.x;
-            const dy = p.y - last.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < bestD2) {
-                bestD2 = d2;
-                bestIdx = i;
-            }
-        }
-
-        if (bestIdx < 0) return -1;
-        return bestD2 <= thr * thr ? bestIdx : -1;
-    }
+   
 
     private updateCloseHint() {
         if (!this.closeHintGfx) return;
@@ -534,11 +509,7 @@ export class CircleCheckOverlay {
 
     // ================= Drawing =================
 
-    // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
-    private getCloseThresholdPx() {
-        // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
-        return Math.max(28, Math.min(this.panelW, this.panelH) * 0.03);
-    }
+   
 
     // tính diện tích polygon từ list điểm
     private polygonAreaFromPoints(points: Phaser.Math.Vector2[]) {
