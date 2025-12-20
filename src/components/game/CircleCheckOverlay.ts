@@ -33,6 +33,9 @@ export class CircleCheckOverlay {
         anchor: Phaser.Math.Vector2;
     };
 
+    //biến xử lý ngưỡng tối thiểu để biết bé tô sai hay chưa tô
+    private readonly MIN_DRAW_POINTS = 8;
+
     private scene: Phaser.Scene;
     private audio?: HowlerAudioManager;
 
@@ -408,9 +411,8 @@ export class CircleCheckOverlay {
         return null;
     }
 
-   
-
     private updateCloseHint() {
+        if (this.points.length < this.MIN_DRAW_POINTS) return;
         if (!this.closeHintGfx) return;
 
         this.closeHintGfx.clear();
@@ -508,8 +510,6 @@ export class CircleCheckOverlay {
     }
 
     // ================= Drawing =================
-
-   
 
     // tính diện tích polygon từ list điểm
     private polygonAreaFromPoints(points: Phaser.Math.Vector2[]) {
@@ -628,10 +628,34 @@ export class CircleCheckOverlay {
         const closure = this.firstCandidate;
 
         // không có vòng kín nào => fail
+        // ❗ CHƯA VẼ ĐỦ → IM LẶNG, KHÔNG FEEDBACK
+        if (this.points.length < this.MIN_DRAW_POINTS) {
+            this.clearDraw(); // chỉ reset nhẹ
+            return;
+        }
+
+        // ❌ ĐÃ VẼ NHƯNG SAI → MỚI PHÁT VOICE
         if (!closure) {
+            this.inputLocked = true;
+
+            this.showCheckIcon(false);
+            this.audio?.play?.('sfx-wrong', { volume: 0.5 });
+
             const failKey = (this as any)._failKey as string;
-            this.playVoiceSafe(failKey);
-            this.scene.time.delayedCall(250, () => this.clearDraw());
+            const played = this.playVoiceSafe(failKey, () => {
+                this.scene.time.delayedCall(120, () => {
+                    this.clearDraw();
+                    this.clearCheckIcon();
+                    this.inputLocked = false;
+                });
+            });
+
+            if (!played) {
+                this.scene.time.delayedCall(450, () => {
+                    this.clearDraw();
+                    this.inputLocked = false;
+                });
+            }
             return;
         }
 
@@ -743,7 +767,14 @@ export class CircleCheckOverlay {
 
         // ✅ fill vùng khoanh (có thể đóng shape để tô, nhưng KHÔNG vẽ viền đóng)
         this.resultGfx.fillStyle(color, 0.25);
-        this.resultGfx.fillPoints(loopPoints as any, true); // true = close để fill
+        this.resultGfx.beginPath();
+this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
+for (let i = 1; i < loopPoints.length; i++) {
+  this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
+}
+this.resultGfx.closePath();
+this.resultGfx.fillPath();
+
 
         // ✅ stroke đúng theo nét người vẽ (KHÔNG nối điểm cuối về điểm đầu)
         this.resultGfx.lineStyle(8, color, 0.9);
