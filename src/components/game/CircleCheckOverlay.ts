@@ -763,20 +763,20 @@ export class CircleCheckOverlay {
         if (!this.resultGfx) return;
 
         this.resultGfx.clear();
+
         const color = isCorrect ? 0x00c853 : 0xff4d4d;
 
-        // ✅ fill vùng khoanh (có thể đóng shape để tô, nhưng KHÔNG vẽ viền đóng)
+        // ===== FILL (KHÔNG fillPoints) =====
         this.resultGfx.fillStyle(color, 0.25);
         this.resultGfx.beginPath();
-this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
-for (let i = 1; i < loopPoints.length; i++) {
-  this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
-}
-this.resultGfx.closePath();
-this.resultGfx.fillPath();
+        this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
+        for (let i = 1; i < loopPoints.length; i++) {
+            this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
+        }
+        this.resultGfx.closePath();
+        this.resultGfx.fillPath();
 
-
-        // ✅ stroke đúng theo nét người vẽ (KHÔNG nối điểm cuối về điểm đầu)
+        // ===== STROKE THEO NÉT VẼ =====
         this.resultGfx.lineStyle(8, color, 0.9);
         this.resultGfx.beginPath();
         this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
