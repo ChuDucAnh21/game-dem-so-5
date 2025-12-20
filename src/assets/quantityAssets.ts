@@ -29,7 +29,7 @@ export const QUANTITY_IMAGES: AssetItem[] = [
 export const QUANTITY_SOUNDS: Record<string, HowlerSoundDef> = {
   //sfx
   "sfx-correct": { src: "assets/audio/sfx/correct.mp3", volume: 0.9, html5: true },
-  "sfx-wrong":   { src: "assets/audio/sfx/wrong.mp3",   volume: 0.03, html5: true },
+  "sfx-wrong":   { src: "assets/audio/sfx/wrong.mp3",   volume: 0.3, html5: true },
   "sfx-click":   { src: "assets/audio/sfx/click.mp3",   volume: 0.2 , html5: true},
   "complete":   { src: 'assets/audio/sfx/complete.mp3', volume: 1.0 , html5: true},
   "fireworks":   { src: 'assets/audio/sfx/fireworks.mp3', loop: true,  volume: 0.2, html5: true },
@@ -56,7 +56,7 @@ export const QUANTITY_SOUNDS: Record<string, HowlerSoundDef> = {
   "voice_try_again_draw": { src: "assets/audio/prompt/retry_draw.mp3", volume: 1.0 , html5: true},
   "voice_try_again_circel": { src: "assets/audio/prompt/retry_circle.mp3", volume: 1.0 , html5: true},
 
-   "bgm_quantity": { src: "assets/audio/bg/music_bg.mp3", loop: true, volume: 0.2, html5: false},
+   "bgm_quantity": { src: "assets/audio/bg/music_bg.mp3", loop: true, volume: 0.5, html5: false},
 
   
 };

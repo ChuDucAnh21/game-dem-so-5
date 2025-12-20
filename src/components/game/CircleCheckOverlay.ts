@@ -64,6 +64,12 @@ export class CircleCheckOverlay {
     private readonly rows = 3;
     private readonly maxItems = 14;
 
+    //Biến checkIcon
+    private checkIcon?: Phaser.GameObjects.Image;
+
+    //Biến khóa vẽ
+    private inputLocked = false;
+
     constructor(scene: Phaser.Scene, audio?: HowlerAudioManager) {
         this.scene = scene;
         this.audio = audio;
@@ -223,7 +229,10 @@ export class CircleCheckOverlay {
     }
 
     public hide() {
+        this.checkIcon?.destroy();
+        this.checkIcon = undefined;
         if (!this.root) return;
+
         this.stopItemsBobbing(); // ✅ thêm
         this.root.setVisible(false);
         this.clearDraw();
@@ -232,156 +241,236 @@ export class CircleCheckOverlay {
 
     // ================= Layout =================
 
-    private segmentIntersection(
-  a: Phaser.Math.Vector2,
-  b: Phaser.Math.Vector2,
-  c: Phaser.Math.Vector2,
-  d: Phaser.Math.Vector2,
-  eps = 0.001
-) {
-  // Trả về {hit, t, u, point} với:
-  // P = a + t(b-a), Q = c + u(d-c)
-  const r = new Phaser.Math.Vector2(b.x - a.x, b.y - a.y);
-  const s = new Phaser.Math.Vector2(d.x - c.x, d.y - c.y);
+    //Hàm checkIcon
+    private showCheckIcon(isCorrect: boolean) {
+        if (!this.panel) return;
 
-  const rxs = r.x * s.y - r.y * s.x;
-  const q_p = new Phaser.Math.Vector2(c.x - a.x, c.y - a.y);
-  const qpxr = q_p.x * r.y - q_p.y * r.x;
+        // xoá icon cũ
+        if (this.checkIcon) {
+            this.checkIcon.destroy();
+            this.checkIcon = undefined;
+        }
 
-  // song song hoặc collinear -> bỏ qua cho đơn giản
-  if (Math.abs(rxs) < eps) return null;
+        const texKey = isCorrect ? 'icon_check_true' : 'icon_check_false';
 
-  const t = (q_p.x * s.y - q_p.y * s.x) / rxs;
-  const u = qpxr / rxs;
+        const { right, bottom } = this.getPanelRectWorld();
 
-  // ✅ giao cắt thực sự trong đoạn (loại trừ gần đầu mút bằng eps)
-  if (t > eps && t < 1 - eps && u > eps && u < 1 - eps) {
-    return {
-      t,
-      u,
-      point: new Phaser.Math.Vector2(a.x + t * r.x, a.y + t * r.y),
-    };
-  }
+        const marginX = this.scene.scale.width * 0.015;
+        const marginY = this.scene.scale.height * 0.015;
 
-  return null;
-}
+        const x = right - marginX;
+        const y = bottom - marginY;
 
-/** tìm vị trí i sao cho đoạn mới (lastPrev->last) cắt đoạn cũ (points[i-1]->points[i]) */
-private findFirstIntersectionClosure() {
-  if (this.points.length < 6) return null;
+        const icon = this.scene.add
+            .image(x, y, texKey)
+            .setOrigin(1, 1)
+            .setDepth(9100); // cao hơn panel overlay
 
-  const last = this.points[this.points.length - 1];
-  const lastPrev = this.points[this.points.length - 2];
+        // scale icon theo panel
+        const panelH = this.panelH;
+        const tex = this.scene.textures.get(texKey).getSourceImage() as
+            | HTMLImageElement
+            | HTMLCanvasElement;
 
-  // bỏ qua mấy đoạn gần cuối để tránh tự cắt ở chính chỗ vừa vẽ
-  const minGap = 10;
+        const targetSize = panelH * 0.14; // ~14% chiều cao panel
+        const scale = targetSize / Math.max(tex.width || 1, tex.height || 1);
 
-  for (let i = 2; i < this.points.length - minGap; i++) {
-    const a = this.points[i - 1];
-    const b = this.points[i];
+        icon.setScale(scale * 0.5);
 
-    const hit = this.segmentIntersection(a, b, lastPrev, last);
-    if (hit) {
-      return {
-        start: i - 1,                 // vòng bắt đầu từ đoạn bị cắt
-        end: this.points.length - 1,  // tới điểm hiện tại
-        anchor: hit.point,            // điểm giao thật
-      };
+        this.scene.tweens.add({
+            targets: icon,
+            scaleX: scale,
+            scaleY: scale,
+            duration: 220,
+            ease: 'Back.Out',
+        });
+
+        this.checkIcon = icon;
     }
-  }
 
-  return null;
-}
+    //Xóa checkIcon
+    private clearCheckIcon() {
+        if (this.checkIcon) {
+            this.checkIcon.destroy();
+            this.checkIcon = undefined;
+        }
+    }
 
+    //hàm distance từ điểm tới đoạn thẳng
+    private pointToSegmentDistance(
+        p: Phaser.Math.Vector2,
+        a: Phaser.Math.Vector2,
+        b: Phaser.Math.Vector2
+    ) {
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const apx = p.x - a.x;
+        const apy = p.y - a.y;
+
+        const abLen2 = abx * abx + aby * aby;
+        if (abLen2 === 0)
+            return Phaser.Math.Distance.Between(p.x, p.y, a.x, a.y);
+
+        let t = (apx * abx + apy * aby) / abLen2;
+        t = Phaser.Math.Clamp(t, 0, 1);
+
+        const projX = a.x + t * abx;
+        const projY = a.y + t * aby;
+
+        return Phaser.Math.Distance.Between(p.x, p.y, projX, projY);
+    }
+
+    private segmentIntersection(
+        a: Phaser.Math.Vector2,
+        b: Phaser.Math.Vector2,
+        c: Phaser.Math.Vector2,
+        d: Phaser.Math.Vector2,
+        eps = 0.001
+    ) {
+        // Trả về {hit, t, u, point} với:
+        // P = a + t(b-a), Q = c + u(d-c)
+        const r = new Phaser.Math.Vector2(b.x - a.x, b.y - a.y);
+        const s = new Phaser.Math.Vector2(d.x - c.x, d.y - c.y);
+
+        const rxs = r.x * s.y - r.y * s.x;
+        const q_p = new Phaser.Math.Vector2(c.x - a.x, c.y - a.y);
+        const qpxr = q_p.x * r.y - q_p.y * r.x;
+
+        // song song hoặc collinear -> bỏ qua cho đơn giản
+        if (Math.abs(rxs) < eps) return null;
+
+        const t = (q_p.x * s.y - q_p.y * s.x) / rxs;
+        const u = qpxr / rxs;
+
+        // ✅ giao cắt thực sự trong đoạn (loại trừ gần đầu mút bằng eps)
+        if (t > eps && t < 1 - eps && u > eps && u < 1 - eps) {
+            return {
+                t,
+                u,
+                point: new Phaser.Math.Vector2(a.x + t * r.x, a.y + t * r.y),
+            };
+        }
+
+        return null;
+    }
+
+    private segmentTouchOrIntersect(
+        a: Phaser.Math.Vector2,
+        b: Phaser.Math.Vector2,
+        c: Phaser.Math.Vector2,
+        d: Phaser.Math.Vector2,
+        eps = 2 // ⭐ CHẠM THẬT: 1–3px là hợp lý
+    ) {
+        // 1. thử intersection thật
+        const hit = this.segmentIntersection(a, b, c, d, eps);
+        if (hit) return hit.point;
+
+        // 2. thử TOUCH (đầu đoạn chạm đoạn kia)
+        if (this.pointToSegmentDistance(a, c, d) <= eps) return a.clone();
+        if (this.pointToSegmentDistance(b, c, d) <= eps) return b.clone();
+        if (this.pointToSegmentDistance(c, a, b) <= eps) return c.clone();
+        if (this.pointToSegmentDistance(d, a, b) <= eps) return d.clone();
+
+        return null;
+    }
+
+    /** tìm vị trí i sao cho đoạn mới (lastPrev->last) cắt đoạn cũ (points[i-1]->points[i]) */
+    private findFirstIntersectionClosure() {
+        if (this.points.length < 6) return null;
+
+        const last = this.points[this.points.length - 1];
+        const lastPrev = this.points[this.points.length - 2];
+
+        // bỏ qua mấy đoạn gần cuối để tránh tự cắt ở chính chỗ vừa vẽ
+        const minGap = 10;
+
+        for (let i = 2; i < this.points.length - minGap; i++) {
+            const a = this.points[i - 1];
+            const b = this.points[i];
+
+            const touchPoint = this.segmentTouchOrIntersect(
+                a,
+                b,
+                lastPrev,
+                last,
+                12 * 0.6 // ⭐ chạm thật
+            );
+
+            if (touchPoint) {
+                return {
+                    start: i - 1,
+                    end: this.points.length - 1,
+                    anchor: touchPoint,
+                };
+            }
+        }
+
+        return null;
+    }
 
     private findClosureIndex(last: Phaser.Math.Vector2) {
-  const thr = this.getCloseThresholdPx();
+        const thr = this.getCloseThresholdPx();
 
-  // ✅ dynamic minGap: vẽ ít điểm vẫn có cơ hội khép vòng
-  const minGap = Math.min(10, Math.max(3, Math.floor(this.points.length * 0.2)));
+        // ✅ dynamic minGap: vẽ ít điểm vẫn có cơ hội khép vòng
+        const minGap = Math.min(
+            10,
+            Math.max(3, Math.floor(this.points.length * 0.2))
+        );
 
-  let bestIdx = -1;
-  let bestD2 = Infinity;
+        let bestIdx = -1;
+        let bestD2 = Infinity;
 
-  for (let i = 0; i < this.points.length - minGap; i++) {
-    const p = this.points[i];
-    const dx = p.x - last.x;
-    const dy = p.y - last.y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 < bestD2) {
-      bestD2 = d2;
-      bestIdx = i;
+        for (let i = 0; i < this.points.length - minGap; i++) {
+            const p = this.points[i];
+            const dx = p.x - last.x;
+            const dy = p.y - last.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < bestD2) {
+                bestD2 = d2;
+                bestIdx = i;
+            }
+        }
+
+        if (bestIdx < 0) return -1;
+        return bestD2 <= thr * thr ? bestIdx : -1;
     }
-  }
 
-  if (bestIdx < 0) return -1;
-  return bestD2 <= thr * thr ? bestIdx : -1;
-}
+    private updateCloseHint() {
+        if (!this.closeHintGfx) return;
 
+        this.closeHintGfx.clear();
 
-   private updateCloseHint() {
-  if (!this.closeHintGfx) return;
+        // đã có vòng kín rồi thì chỉ hiển thị anchor
+        if (this.firstCandidate) {
+            const a = this.firstCandidate.anchor;
+            this.closeHintGfx.fillStyle(0x00c853, 0.85);
+            this.closeHintGfx.fillCircle(a.x, a.y, 10);
+            return;
+        }
 
-  this.closeHintGfx.clear();
+        // cần đủ điểm tối thiểu
+        if (this.points.length < 8) return;
 
-  // ✅ đã chốt vòng rồi thì chỉ vẽ hint, không cập nhật nữa
-  if (this.firstCandidate) {
-    const a = this.firstCandidate.anchor;
-    this.closeHintGfx.fillStyle(0x00c853, 0.85);
-    this.closeHintGfx.fillCircle(a.x, a.y, 10);
-    return;
-  }
+        // CHỈ xét giao cắt thật
+        const closure = this.findFirstIntersectionClosure();
+        if (!closure) return;
 
-  // ✅ vẽ ít cũng được (đừng bắt >= 12 cứng)
-  if (this.points.length < 8) return;
+        const loopPoints = this.points.slice(closure.start, closure.end + 1);
 
-  const last = this.points[this.points.length - 1];
+        // chống vòng quá nhỏ
+        const minArea = this.panelW * this.panelH * 0.02;
+        const area = this.polygonAreaFromPoints(loopPoints);
+        if (area < minArea) return;
 
-  // ===================== (A) TOUCH CLOSURE: chạm là khép =====================
-  const touchIdx = this.findClosureIndex(last);
-  if (touchIdx >= 0) {
-    const start = touchIdx;
-    const end = this.points.length - 1;
+        this.firstCandidate = {
+            start: closure.start,
+            end: closure.end,
+            anchor: closure.anchor,
+        };
 
-    const loopPoints = this.points.slice(start, end + 1);
-
-    const minArea = this.panelW * this.panelH * 0.02;
-    const area = this.polygonAreaFromPoints(loopPoints);
-    if (area < minArea) return;
-
-    this.firstCandidate = {
-      start,
-      end,
-      anchor: this.points[touchIdx].clone(),
-    };
-
-    this.closeHintGfx.fillStyle(0x00c853, 0.85);
-    this.closeHintGfx.fillCircle(this.firstCandidate.anchor.x, this.firstCandidate.anchor.y, 10);
-    return;
-  }
-
-  // ===================== (B) INTERSECTION fallback =====================
-  const closure = this.findFirstIntersectionClosure();
-  if (!closure) return;
-
-  const start = closure.start;
-  const end = closure.end;
-  const loopPoints = this.points.slice(start, end + 1);
-
-  const minArea = this.panelW * this.panelH * 0.02;
-  const area = this.polygonAreaFromPoints(loopPoints);
-  if (area < minArea) return;
-
-  this.firstCandidate = {
-    start,
-    end,
-    anchor: closure.anchor,
-  };
-
-  this.closeHintGfx.fillStyle(0x00c853, 0.85);
-  this.closeHintGfx.fillCircle(closure.anchor.x, closure.anchor.y, 10);
-}
-
+        this.closeHintGfx.fillStyle(0x00c853, 0.85);
+        this.closeHintGfx.fillCircle(closure.anchor.x, closure.anchor.y, 10);
+    }
 
     /** trả về toạ độ trong panel-space (0..panelW, 0..panelH), đã căn giữa theo hàng */
     private layoutPositions(
@@ -450,8 +539,6 @@ private findFirstIntersectionClosure() {
         // ngưỡng “kín” theo kích thước panel (tăng/giảm tuỳ bạn)
         return Math.max(28, Math.min(this.panelW, this.panelH) * 0.03);
     }
-
-    
 
     // tính diện tích polygon từ list điểm
     private polygonAreaFromPoints(points: Phaser.Math.Vector2[]) {
@@ -522,8 +609,12 @@ private findFirstIntersectionClosure() {
 
     // sự kiện input vẽ
     private onDown(p: Phaser.Input.Pointer) {
+        if (this.inputLocked) return;
         if (!this.root?.visible) return;
         if (!this.isInsidePanel(p.x, p.y)) return;
+
+        // ✅ Bé bắt đầu vẽ lại → xoá icon đúng/sai cũ
+        this.clearCheckIcon();
 
         this.drawing = true;
         this.points = [new Phaser.Math.Vector2(p.x, p.y)];
@@ -537,6 +628,7 @@ private findFirstIntersectionClosure() {
 
     // sự kiện input vẽ (di chuyển)
     private onMove(p: Phaser.Input.Pointer) {
+        if (this.inputLocked) return;
         if (!this.root?.visible) return;
         if (!this.drawing) return;
         // nếu đã chốt vòng đầu tiên rồi thì không nhận thêm điểm nữa
@@ -555,6 +647,7 @@ private findFirstIntersectionClosure() {
 
     // sự kiện input vẽ (nhấc bút)
     private onUp(_p: Phaser.Input.Pointer) {
+        if (this.inputLocked) return;
         if (!this.root?.visible) return;
         if (!this.drawing) return;
 
@@ -616,6 +709,8 @@ private findFirstIntersectionClosure() {
         const failKey = (this as any)._failKey as string;
 
         if (isCorrect) {
+            this.showCheckIcon(true);
+            this.audio?.play?.('sfx-correct', { volume: 0.9 });
             const played = this.playVoiceSafe(successKey, () => {
                 this.scene.time.delayedCall(120, () => {
                     this.hide();
@@ -623,19 +718,29 @@ private findFirstIntersectionClosure() {
                 });
             });
             if (!played) {
-                this.audio?.play?.('sfx-correct', { volume: 0.9 });
                 this.scene.time.delayedCall(450, () => {
                     this.hide();
                     this.onSuccess?.();
                 });
             }
         } else {
+            // ❌ SAI → KHOÁ INPUT NGAY
+            this.inputLocked = true;
+            this.showCheckIcon(false);
+            this.audio?.play?.('sfx-wrong', { volume: 0.5 });
             const played = this.playVoiceSafe(failKey, () => {
-                this.scene.time.delayedCall(120, () => this.clearDraw());
+                this.scene.time.delayedCall(120, () => {
+                    this.clearDraw();
+                    this.checkIcon?.destroy();
+                    this.checkIcon = undefined;
+                    this.inputLocked = false;
+                });
             });
             if (!played) {
-                this.audio?.play?.('sfx-wrong', { volume: 0.05 });
-                this.scene.time.delayedCall(450, () => this.clearDraw());
+                this.scene.time.delayedCall(450, () => {
+                    this.clearDraw();
+                    this.inputLocked = false;
+                });
             }
         }
     }
@@ -659,25 +764,24 @@ private findFirstIntersectionClosure() {
 
     // tô vùng khoanh (xanh/đỏ)
     private paintResult(loopPoints: Phaser.Math.Vector2[], isCorrect: boolean) {
-  if (!this.resultGfx) return;
+        if (!this.resultGfx) return;
 
-  this.resultGfx.clear();
-  const color = isCorrect ? 0x00c853 : 0xff4d4d;
+        this.resultGfx.clear();
+        const color = isCorrect ? 0x00c853 : 0xff4d4d;
 
-  // ✅ fill vùng khoanh (có thể đóng shape để tô, nhưng KHÔNG vẽ viền đóng)
-  this.resultGfx.fillStyle(color, 0.25);
-  this.resultGfx.fillPoints(loopPoints as any, true); // true = close để fill
+        // ✅ fill vùng khoanh (có thể đóng shape để tô, nhưng KHÔNG vẽ viền đóng)
+        this.resultGfx.fillStyle(color, 0.25);
+        this.resultGfx.fillPoints(loopPoints as any, true); // true = close để fill
 
-  // ✅ stroke đúng theo nét người vẽ (KHÔNG nối điểm cuối về điểm đầu)
-  this.resultGfx.lineStyle(8, color, 0.9);
-  this.resultGfx.beginPath();
-  this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
-  for (let i = 1; i < loopPoints.length; i++) {
-    this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
-  }
-  this.resultGfx.strokePath();
-}
-
+        // ✅ stroke đúng theo nét người vẽ (KHÔNG nối điểm cuối về điểm đầu)
+        this.resultGfx.lineStyle(8, color, 0.9);
+        this.resultGfx.beginPath();
+        this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
+        for (let i = 1; i < loopPoints.length; i++) {
+            this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
+        }
+        this.resultGfx.strokePath();
+    }
 
     // phát voice an toàn (kiểm tra tồn tại key)
     private playVoiceSafe(key: string, onDone?: () => void) {
