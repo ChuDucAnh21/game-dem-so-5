@@ -21,6 +21,13 @@ export type CircleCheckOverlayOptions = {
 };
 
 export class CircleCheckOverlay {
+
+    // lớp màu kết quả (1 lớp duy nhất)
+private resultFill?: Phaser.GameObjects.Rectangle;
+
+// graphics dùng làm mask
+private resultMaskGfx?: Phaser.GameObjects.Graphics;
+
     // ✅ hint xanh khi gần khép vòng
     private closeHintGfx?: Phaser.GameObjects.Graphics;
     closeHintActive = false;
@@ -107,6 +114,29 @@ export class CircleCheckOverlay {
 
         this.resultGfx = this.scene.add.graphics().setScrollFactor(0);
         this.drawGfx = this.scene.add.graphics().setScrollFactor(0);
+
+        // ✅ lớp màu phủ toàn màn (sẽ bị mask cắt theo polygon)
+this.resultFill = this.scene.add
+  .rectangle(0, 0, w, h, 0x00c853, 0.25) // màu sẽ set lại khi paintResult
+  .setOrigin(0, 0)
+  .setScrollFactor(0)
+  .setVisible(false);
+
+// ✅ graphics làm mask (ẩn đi)
+this.resultMaskGfx = this.scene.add
+  .graphics()
+  .setScrollFactor(0)
+  .setVisible(false);
+
+// gắn mask cho lớp màu
+this.resultFill.setMask(this.resultFill.createGeometryMask(this.resultMaskGfx));
+
+// add vào root để render theo overlay
+this.root.add(this.resultFill);
+this.root.add(this.resultMaskGfx);
+
+// (giữ nguyên closeHintGfx / drawGfx…)
+
 
         this.closeHintGfx = this.scene.add.graphics().setScrollFactor(0);
         this.root.add(this.closeHintGfx);
@@ -595,6 +625,8 @@ export class CircleCheckOverlay {
         this.closeHintActive = false;
         this.closeHintAnchor = undefined;
         this.closeHintGfx?.clear();
+        this.resultFill?.setVisible(false);
+this.resultMaskGfx?.clear();
     }
 
     // sự kiện input vẽ (di chuyển)
@@ -760,23 +792,27 @@ export class CircleCheckOverlay {
 
     // tô vùng khoanh (xanh/đỏ)
     private paintResult(loopPoints: Phaser.Math.Vector2[], isCorrect: boolean) {
-        if (!this.resultGfx) return;
+  if (!this.resultFill || !this.resultMaskGfx) return;
 
-        this.resultGfx.clear();
+  const color = isCorrect ? 0x00c853 : 0xff4d4d;
 
-        const color = isCorrect ? 0x00c853 : 0xff4d4d;
+  // ✅ chỉ 1 lớp màu duy nhất -> không bao giờ “đậm lên”
+  this.resultFill
+    .setFillStyle(color, 0.25) // alpha bạn muốn
+    .setVisible(true);
 
-        // ===== FILL (KHÔNG fillPoints) =====
-        this.resultGfx.fillStyle(color, 0.25);
-        this.resultGfx.beginPath();
-        this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
-        for (let i = 1; i < loopPoints.length; i++) {
-            this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
-        }
-        this.resultGfx.closePath();
-        this.resultGfx.fillPath();
+  // ✅ vẽ mask (alpha 1) để cắt lớp màu
+  this.resultMaskGfx.clear();
+  this.resultMaskGfx.fillStyle(0xffffff, 1);
+  this.resultMaskGfx.beginPath();
+  this.resultMaskGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
+  for (let i = 1; i < loopPoints.length; i++) {
+    this.resultMaskGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
+  }
+  this.resultMaskGfx.closePath();
+  this.resultMaskGfx.fillPath();
+}
 
-    }
 
     // phát voice an toàn (kiểm tra tồn tại key)
     private playVoiceSafe(key: string, onDone?: () => void) {
@@ -806,6 +842,9 @@ export class CircleCheckOverlay {
         this.drawGfx?.clear();
         this.resultGfx?.clear();
         this.closeHintGfx?.clear();
+
+        this.resultFill?.setVisible(false);
+this.resultMaskGfx?.clear();
     }
 
     private clearItems() {
