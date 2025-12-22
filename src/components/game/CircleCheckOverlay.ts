@@ -407,77 +407,75 @@ this.root.add(this.resultMaskGfx);
         return null;
     }
 
+    private buildLoopPoints(closure: { start: number; end: number; anchor: Phaser.Math.Vector2 }) {
+  const body = this.points.slice(closure.start, closure.end + 1);
+  return [closure.anchor.clone(), ...body, closure.anchor.clone()];
+}
+
+
     /** tìm vị trí i sao cho đoạn mới (lastPrev->last) cắt đoạn cũ (points[i-1]->points[i]) */
     private findFirstIntersectionClosure() {
-        if (this.points.length < 6) return null;
+  if (this.points.length < 6) return null;
 
-        const last = this.points[this.points.length - 1];
-        const lastPrev = this.points[this.points.length - 2];
+  const last = this.points[this.points.length - 1];
+  const lastPrev = this.points[this.points.length - 2];
 
-        // bỏ qua mấy đoạn gần cuối để tránh tự cắt ở chính chỗ vừa vẽ
-        const minGap = 10;
+  const minGap = 10;
 
-        for (let i = 2; i < this.points.length - minGap; i++) {
-            const a = this.points[i - 1];
-            const b = this.points[i];
+  for (let i = 2; i < this.points.length - minGap; i++) {
+    const a = this.points[i - 1];
+    const b = this.points[i];
 
-            const touchPoint = this.segmentTouchOrIntersect(
-                a,
-                b,
-                lastPrev,
-                last,
-                12 * 0.6 // ⭐ chạm thật
-            );
+    const touchPoint = this.segmentTouchOrIntersect(
+      a,
+      b,
+      lastPrev,
+      last,
+      12 * 0.6
+    );
 
-            if (touchPoint) {
-                return {
-                    start: i - 1,
-                    end: this.points.length - 1,
-                    anchor: touchPoint,
-                };
-            }
-        }
-
-        return null;
+    if (touchPoint) {
+      return {
+        start: i, // ✅ bắt đầu từ điểm SAU đoạn bị cắt
+        end: this.points.length - 2, // ✅ kết thúc ở lastPrev
+        anchor: touchPoint,
+      };
     }
+  }
+
+  return null;
+}
+
 
     private updateCloseHint() {
-        if (this.points.length < this.MIN_DRAW_POINTS) return;
-        if (!this.closeHintGfx) return;
+  if (this.points.length < this.MIN_DRAW_POINTS) return;
+  if (!this.closeHintGfx) return;
 
-        this.closeHintGfx.clear();
+  this.closeHintGfx.clear();
 
-        // đã có vòng kín rồi thì chỉ hiển thị anchor
-        if (this.firstCandidate) {
-            const a = this.firstCandidate.anchor;
-            this.closeHintGfx.fillStyle(0x00c853, 0.85);
-            this.closeHintGfx.fillCircle(a.x, a.y, 10);
-            return;
-        }
+  // luôn thử tìm closure mới theo đoạn vừa vẽ
+  const closure = this.findFirstIntersectionClosure();
 
-        // cần đủ điểm tối thiểu
-        if (this.points.length < 8) return;
+  if (closure) {
+    const loopPoints = this.buildLoopPoints(closure);
 
-        // CHỈ xét giao cắt thật
-        const closure = this.findFirstIntersectionClosure();
-        if (!closure) return;
+    const minArea = this.panelW * this.panelH * 0.02;
+    const area = this.polygonAreaFromPoints(loopPoints);
 
-        const loopPoints = this.points.slice(closure.start, closure.end + 1);
-
-        // chống vòng quá nhỏ
-        const minArea = this.panelW * this.panelH * 0.02;
-        const area = this.polygonAreaFromPoints(loopPoints);
-        if (area < minArea) return;
-
-        this.firstCandidate = {
-            start: closure.start,
-            end: closure.end,
-            anchor: closure.anchor,
-        };
-
-        this.closeHintGfx.fillStyle(0x00c853, 0.85);
-        this.closeHintGfx.fillCircle(closure.anchor.x, closure.anchor.y, 10);
+    // ✅ đủ lớn thì cập nhật candidate (vòng mới)
+    if (area >= minArea) {
+      this.firstCandidate = closure;
     }
+  }
+
+  // ✅ nếu đang có candidate (cũ hoặc mới) thì vẽ chấm anchor
+  if (this.firstCandidate) {
+    const a = this.firstCandidate.anchor;
+    this.closeHintGfx.fillStyle(0x00c853, 0.85);
+    this.closeHintGfx.fillCircle(a.x, a.y, 10);
+  }
+}
+
 
     /** trả về toạ độ trong panel-space (0..panelW, 0..panelH), đã căn giữa theo hàng */
     private layoutPositions(
@@ -631,6 +629,7 @@ this.resultMaskGfx?.clear();
 
     // sự kiện input vẽ (di chuyển)
     private onMove(p: Phaser.Input.Pointer) {
+       
         if (this.inputLocked) return;
         if (!this.root?.visible) return;
         if (!this.drawing) return;
@@ -692,8 +691,7 @@ this.resultMaskGfx?.clear();
         }
 
         // ✅ chỉ lấy đoạn [start..end] tại thời điểm nó khép vòng (bỏ phần kéo dài phía sau)
-        const loopPoints = this.points.slice(closure.start, closure.end + 1);
-
+    const loopPoints = this.buildLoopPoints(closure);
         if (loopPoints.length < 12) {
             const failKey = (this as any)._failKey as string;
             this.playVoiceSafe(failKey);
