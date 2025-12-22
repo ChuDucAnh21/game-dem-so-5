@@ -776,14 +776,6 @@ export class CircleCheckOverlay {
         this.resultGfx.closePath();
         this.resultGfx.fillPath();
 
-        // ===== STROKE THEO NÉT VẼ =====
-        this.resultGfx.lineStyle(8, color, 0.9);
-        this.resultGfx.beginPath();
-        this.resultGfx.moveTo(loopPoints[0].x, loopPoints[0].y);
-        for (let i = 1; i < loopPoints.length; i++) {
-            this.resultGfx.lineTo(loopPoints[i].x, loopPoints[i].y);
-        }
-        this.resultGfx.strokePath();
     }
 
     // phát voice an toàn (kiểm tra tồn tại key)
